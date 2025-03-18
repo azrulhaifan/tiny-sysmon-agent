@@ -1,17 +1,27 @@
 {
-  "name": "nodejs-sysmon",
+  "name": "system-metrics",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "System metrics API and exporter",
+  "main": "metrics-api.js",
   "scripts": {
+    "start": "node metrics-api.js",
+    "api": "node metrics-api.js",
+    "exporter": "node metrics-exporter.js",
+    "start:all": "npm run api & npm run exporter",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": [
+    "system",
+    "metrics",
+    "monitoring",
+    "api"
+  ],
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "systeminformation": "^5.25.11"
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "systeminformation": "^5.21.20"
   }
 }

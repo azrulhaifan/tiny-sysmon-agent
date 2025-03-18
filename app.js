@@ -9,6 +9,8 @@ let metrics = {
   cpu: [],
   memory: [],
   swap: [],
+  diskRead: [],
+  diskWrite: [],
   diskIO: []
 };
 
@@ -60,8 +62,12 @@ async function collectData() {
     
     // Disk IO
     const diskIO = await si.disksIO();
-    const totalIO = diskIO.rIO + diskIO.wIO;
-    metrics.diskIO.push(totalIO);
+    metrics.diskRead.push(diskIO.rIO_sec || 0);  // Read operations per second
+    metrics.diskWrite.push(diskIO.wIO_sec || 0); // Write operations per second
+    metrics.diskIO.push((diskIO.rIO_sec || 0) + (diskIO.wIO_sec || 0)); // Total IO operations per second
+    
+    if (metrics.diskRead.length > 100) metrics.diskRead.shift();
+    if (metrics.diskWrite.length > 100) metrics.diskWrite.shift();
     if (metrics.diskIO.length > 100) metrics.diskIO.shift();
     
   } catch (error) {
@@ -85,6 +91,33 @@ app.get('/api/system-metrics', async (req, res) => {
     
     // Mendapatkan data memory langsung
     const memInfo = await si.mem();
+    
+    // Mendapatkan informasi disk
+    const fsSize = await si.fsSize();
+    const disksInfo = await si.blockDevices();
+    const disks = fsSize.map(disk => {
+      const diskInfo = disksInfo.find(d => d.mount === disk.mount || d.name === disk.fs);
+      return {
+        name: disk.fs,
+        mount: disk.mount,
+        type: disk.type,
+        size: {
+          bytes: disk.size,
+          formatted: formatBytes(disk.size)
+        },
+        used: {
+          bytes: disk.used,
+          formatted: formatBytes(disk.used)
+        },
+        available: {
+          bytes: disk.available,
+          formatted: formatBytes(disk.available)
+        },
+        use_percent: parseFloat(disk.use.toFixed(2)),
+        physical_type: diskInfo ? diskInfo.type : 'unknown',
+        model: diskInfo ? diskInfo.model : 'unknown'
+      };
+    });
     
     // Mendapatkan data sistem
     const response = {
@@ -122,8 +155,18 @@ app.get('/api/system-metrics', async (req, res) => {
         }
       },
       diskIO: {
-        load: calculateStats(metrics.diskIO)
+        operations_per_second: {
+          total: calculateStats(metrics.diskIO),
+          read: calculateStats(metrics.diskRead),
+          write: calculateStats(metrics.diskWrite)
+        },
+        current: {
+          total: metrics.diskIO.length > 0 ? metrics.diskIO[metrics.diskIO.length - 1] : 0,
+          read: metrics.diskRead.length > 0 ? metrics.diskRead[metrics.diskRead.length - 1] : 0,
+          write: metrics.diskWrite.length > 0 ? metrics.diskWrite[metrics.diskWrite.length - 1] : 0
+        }
       },
+      disks: disks,
       uptime: uptimeString
     };
     

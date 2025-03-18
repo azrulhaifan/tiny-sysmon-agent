@@ -1,8 +1,18 @@
+require('dotenv').config();
 const express = require('express');
 const os = require('os');
 const si = require('systeminformation');
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
+
+// Konfigurasi metrik dari .env
+const config = {
+  enableCpu: process.env.ENABLE_CPU_METRICS !== 'false',
+  enableMemory: process.env.ENABLE_MEMORY_METRICS !== 'false',
+  enableSwap: process.env.ENABLE_SWAP_METRICS !== 'false',
+  enableDiskIO: process.env.ENABLE_DISK_IO_METRICS !== 'false',
+  enableDiskSpace: process.env.ENABLE_DISK_SPACE_METRICS !== 'false'
+};
 
 // Menyimpan data historis untuk menghitung min, max, avg
 let metrics = {
@@ -45,30 +55,39 @@ function calculateStats(data) {
 async function collectData() {
   try {
     // CPU Load
-    const cpuLoad = await si.currentLoad();
-    metrics.cpu.push(cpuLoad.currentLoad);
-    if (metrics.cpu.length > 100) metrics.cpu.shift();
+    if (config.enableCpu) {
+      const cpuLoad = await si.currentLoad();
+      metrics.cpu.push(cpuLoad.currentLoad);
+      if (metrics.cpu.length > 100) metrics.cpu.shift();
+    }
     
     // Memory Load
-    const memInfo = await si.mem();
-    const memoryLoad = (memInfo.used / memInfo.total) * 100;
-    metrics.memory.push(memoryLoad);
-    if (metrics.memory.length > 100) metrics.memory.shift();
+    if (config.enableMemory) {
+      const memInfo = await si.mem();
+      const memoryLoad = (memInfo.used / memInfo.total) * 100;
+      metrics.memory.push(memoryLoad);
+      if (metrics.memory.length > 100) metrics.memory.shift();
+    }
     
     // Swap Load
-    const swapLoad = (memInfo.swapused / memInfo.swaptotal) * 100 || 0;
-    metrics.swap.push(swapLoad);
-    if (metrics.swap.length > 100) metrics.swap.shift();
+    if (config.enableSwap) {
+      const memInfo = await si.mem();
+      const swapLoad = (memInfo.swapused / memInfo.swaptotal) * 100 || 0;
+      metrics.swap.push(swapLoad);
+      if (metrics.swap.length > 100) metrics.swap.shift();
+    }
     
     // Disk IO
-    const diskIO = await si.disksIO();
-    metrics.diskRead.push(diskIO.rIO_sec || 0);  // Read operations per second
-    metrics.diskWrite.push(diskIO.wIO_sec || 0); // Write operations per second
-    metrics.diskIO.push((diskIO.rIO_sec || 0) + (diskIO.wIO_sec || 0)); // Total IO operations per second
-    
-    if (metrics.diskRead.length > 100) metrics.diskRead.shift();
-    if (metrics.diskWrite.length > 100) metrics.diskWrite.shift();
-    if (metrics.diskIO.length > 100) metrics.diskIO.shift();
+    if (config.enableDiskIO) {
+      const diskIO = await si.disksIO();
+      metrics.diskRead.push(diskIO.rIO_sec || 0);  // Read operations per second
+      metrics.diskWrite.push(diskIO.wIO_sec || 0); // Write operations per second
+      metrics.diskIO.push((diskIO.rIO_sec || 0) + (diskIO.wIO_sec || 0)); // Total IO operations per second
+      
+      if (metrics.diskRead.length > 100) metrics.diskRead.shift();
+      if (metrics.diskWrite.length > 100) metrics.diskWrite.shift();
+      if (metrics.diskIO.length > 100) metrics.diskIO.shift();
+    }
     
   } catch (error) {
     console.error('Error collecting system data:', error);
@@ -76,7 +95,8 @@ async function collectData() {
 }
 
 // Mulai mengumpulkan data
-setInterval(collectData, 5000);
+const collectionInterval = parseInt(process.env.COLLECTION_INTERVAL_MS) || 5000;
+setInterval(collectData, collectionInterval);
 collectData(); // Panggil sekali di awal
 
 // Route untuk mendapatkan semua data sistem
@@ -89,42 +109,22 @@ app.get('/api/system-metrics', async (req, res) => {
     const uptimeMinutes = Math.floor((uptimeSeconds % 3600) / 60);
     const uptimeString = `${uptimeDays} days, ${uptimeHours} hours, ${uptimeMinutes} minutes`;
     
-    // Mendapatkan data memory langsung
-    const memInfo = await si.mem();
-    
-    // Mendapatkan informasi disk
-    const fsSize = await si.fsSize();
-    const disksInfo = await si.blockDevices();
-    const disks = fsSize.map(disk => {
-      const diskInfo = disksInfo.find(d => d.mount === disk.mount || d.name === disk.fs);
-      return {
-        name: disk.fs,
-        mount: disk.mount,
-        type: disk.type,
-        size: {
-          bytes: disk.size,
-          formatted: formatBytes(disk.size)
-        },
-        used: {
-          bytes: disk.used,
-          formatted: formatBytes(disk.used)
-        },
-        available: {
-          bytes: disk.available,
-          formatted: formatBytes(disk.available)
-        },
-        use_percent: parseFloat(disk.use.toFixed(2)),
-        physical_type: diskInfo ? diskInfo.type : 'unknown',
-        model: diskInfo ? diskInfo.model : 'unknown'
-      };
-    });
-    
-    // Mendapatkan data sistem
+    // Inisialisasi response
     const response = {
-      cpu: {
+      uptime: uptimeString
+    };
+    
+    // Tambahkan CPU metrics jika diaktifkan
+    if (config.enableCpu) {
+      response.cpu = {
         load: calculateStats(metrics.cpu)
-      },
-      memory: {
+      };
+    }
+    
+    // Tambahkan Memory metrics jika diaktifkan
+    if (config.enableMemory) {
+      const memInfo = await si.mem();
+      response.memory = {
         load_percent: calculateStats(metrics.memory),
         total: {
           bytes: memInfo.total,
@@ -138,8 +138,13 @@ app.get('/api/system-metrics', async (req, res) => {
           bytes: memInfo.free,
           formatted: formatBytes(memInfo.free)
         }
-      },
-      swap: {
+      };
+    }
+    
+    // Tambahkan Swap metrics jika diaktifkan
+    if (config.enableSwap) {
+      const memInfo = await si.mem();
+      response.swap = {
         load_percent: calculateStats(metrics.swap),
         total: {
           bytes: memInfo.swaptotal,
@@ -153,8 +158,12 @@ app.get('/api/system-metrics', async (req, res) => {
           bytes: memInfo.swapfree,
           formatted: formatBytes(memInfo.swapfree)
         }
-      },
-      diskIO: {
+      };
+    }
+    
+    // Tambahkan Disk IO metrics jika diaktifkan
+    if (config.enableDiskIO) {
+      response.diskIO = {
         operations_per_second: {
           total: calculateStats(metrics.diskIO),
           read: calculateStats(metrics.diskRead),
@@ -165,10 +174,39 @@ app.get('/api/system-metrics', async (req, res) => {
           read: metrics.diskRead.length > 0 ? metrics.diskRead[metrics.diskRead.length - 1] : 0,
           write: metrics.diskWrite.length > 0 ? metrics.diskWrite[metrics.diskWrite.length - 1] : 0
         }
-      },
-      disks: disks,
-      uptime: uptimeString
-    };
+      };
+    }
+    
+    // Tambahkan Disk Space metrics jika diaktifkan
+    if (config.enableDiskSpace) {
+      const fsSize = await si.fsSize();
+      const disksInfo = await si.blockDevices();
+      const disks = fsSize.map(disk => {
+        const diskInfo = disksInfo.find(d => d.mount === disk.mount || d.name === disk.fs);
+        return {
+          name: disk.fs,
+          mount: disk.mount,
+          type: disk.type,
+          size: {
+            bytes: disk.size,
+            formatted: formatBytes(disk.size)
+          },
+          used: {
+            bytes: disk.used,
+            formatted: formatBytes(disk.used)
+          },
+          available: {
+            bytes: disk.available,
+            formatted: formatBytes(disk.available)
+          },
+          use_percent: parseFloat(disk.use.toFixed(2)),
+          physical_type: diskInfo ? diskInfo.type : 'unknown',
+          model: diskInfo ? diskInfo.model : 'unknown'
+        };
+      });
+      
+      response.disks = disks;
+    }
     
     res.json(response);
   } catch (error) {
@@ -180,4 +218,5 @@ app.get('/api/system-metrics', async (req, res) => {
 // Mulai server
 app.listen(port, () => {
   console.log(`System monitoring API running on port ${port}`);
+  console.log(`Metrics enabled: CPU=${config.enableCpu}, Memory=${config.enableMemory}, Swap=${config.enableSwap}, DiskIO=${config.enableDiskIO}, DiskSpace=${config.enableDiskSpace}`);
 });

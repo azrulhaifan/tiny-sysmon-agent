@@ -220,3 +220,5 @@ app.listen(port, () => {
   console.log(`System monitoring API running on port ${port}`);
   console.log(`Metrics enabled: CPU=${config.enableCpu}, Memory=${config.enableMemory}, Swap=${config.enableSwap}, DiskIO=${config.enableDiskIO}, DiskSpace=${config.enableDiskSpace}`);
 });
+
+module.exports = { collectData, metrics };

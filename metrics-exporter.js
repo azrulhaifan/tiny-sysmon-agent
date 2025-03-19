@@ -88,18 +88,20 @@ async function collectAndExportMetrics() {
       }));
     }
 
+    // console.log(`PAYLOAD: ` + JSON.stringify(metrics));
+
     // Mengirim data ke API pihak ketiga
     console.log(`Sending metrics to ${config.apiUrl}`);
     
     const response = await axios.post(config.apiUrl, metrics, {
       headers: {
         'Content-Type': 'application/json',
-        'API-KEY': config.apiKey
+        'X-API-Key': config.apiKey
       }
     });
 
     console.log(`Metrics exported successfully. Status: ${response.status}`);
-    console.log(`RESPONSE: ` + JSON.stringify(response.data));
+    // console.log(`RESPONSE: ` + JSON.stringify(response.data));
     
   } catch (error) {
     console.error('Error exporting metrics:', error.message);

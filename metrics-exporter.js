@@ -2,6 +2,7 @@ require('dotenv').config();
 const axios = require('axios');
 const os = require('os');
 const si = require('systeminformation');
+const fs = require("fs");
 
 // Add logging utility
 const LOG_LEVEL = process.env.LOG_LEVEL || 'NONE';
@@ -25,6 +26,30 @@ const config = {
   enableNetwork: process.env.ENABLE_NETWORK_METRICS !== 'false'  // Tambahkan ini
 };
 
+function getDiskByteStats() {
+  try {
+    const data = fs.readFileSync("/proc/diskstats", "utf8");
+    const lines = data.split("\n");
+
+    const diskLine = lines.find(line => line.includes(" sda ")); // Ubah jika disk bukan sda
+    if (!diskLine) return null;
+
+    const parts = diskLine.trim().split(/\s+/);
+    return {
+        sectorsRead: parseInt(parts[5]),  // Total sektor dibaca
+        sectorsWritten: parseInt(parts[9]) // Total sektor ditulis
+    };
+  } catch (e) {
+    // IN CASE fs read fail
+    return {
+      sectorsRead: 0,
+      sectorsWritten: 0,
+    };
+  }
+}
+
+const SECTOR_SIZE = 512;
+let previousDiskByteStats = null;
 // Fungsi untuk mengumpulkan dan mengirim metrics
 async function collectAndExportMetrics() {
   try {
@@ -75,13 +100,29 @@ async function collectAndExportMetrics() {
     // Mengumpulkan Disk IO metrics jika diaktifkan
     if (config.enableDiskIO) {
       const diskIO = await si.disksIO();
+
+      // CALC DISK BYTE STATS
+      if (!previousDiskByteStats) {
+        previousDiskByteStats = getDiskByteStats();
+        console.log(getDiskByteStats());
+      }
+
+      const currentDiskByteStats = getDiskByteStats();
+      const readBytesPerSec = ((currentDiskByteStats.sectorsRead - previousDiskByteStats.sectorsRead) * SECTOR_SIZE) / (config.exportInterval / 1000);
+      const writeBytesPerSec = ((currentDiskByteStats.sectorsWritten - previousDiskByteStats.sectorsWritten) * SECTOR_SIZE) / (config.exportInterval / 1000);
+
       metrics.diskIO = {
         readOps: diskIO.rIO,
         writeOps: diskIO.wIO,
         readOpsPerSec: diskIO.rIO_sec || 0,
         writeOpsPerSec: diskIO.wIO_sec || 0,
-        totalOpsPerSec: (diskIO.rIO_sec || 0) + (diskIO.wIO_sec || 0)
+        totalOpsPerSec: (diskIO.rIO_sec || 0) + (diskIO.wIO_sec || 0),
+
+        readBytesPerSec: readBytesPerSec,
+        writeBytesPerSec: writeBytesPerSec,
       };
+
+      previousDiskByteStats = currentDiskByteStats;
     }
 
     // Mengumpulkan Disk Space metrics jika diaktifkan

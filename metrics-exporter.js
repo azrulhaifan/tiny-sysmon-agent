@@ -12,7 +12,8 @@ const config = {
   enableMemory: process.env.ENABLE_MEMORY_METRICS !== 'false',
   enableSwap: process.env.ENABLE_SWAP_METRICS !== 'false', 
   enableDiskIO: process.env.ENABLE_DISK_IO_METRICS !== 'false',
-  enableDiskSpace: process.env.ENABLE_DISK_SPACE_METRICS !== 'false'
+  enableDiskSpace: process.env.ENABLE_DISK_SPACE_METRICS !== 'false',
+  enableNetwork: process.env.ENABLE_NETWORK_METRICS !== 'false'  // Tambahkan ini
 };
 
 // Fungsi untuk mengumpulkan dan mengirim metrics
@@ -88,7 +89,28 @@ async function collectAndExportMetrics() {
       }));
     }
 
-    // console.log(`PAYLOAD: ` + JSON.stringify(metrics));
+    // Mengumpulkan Network metrics jika diaktifkan
+    if (config.enableNetwork) {
+      const networkStats = await si.networkStats();
+      metrics.network = {
+        total: {
+          rx_bytes: networkStats.reduce((acc, net) => acc + net.rx_bytes, 0),
+          tx_bytes: networkStats.reduce((acc, net) => acc + net.tx_bytes, 0),
+          rx_sec: networkStats.reduce((acc, net) => acc + (net.rx_sec || 0), 0),
+          tx_sec: networkStats.reduce((acc, net) => acc + (net.tx_sec || 0), 0)
+        },
+        // interfaces: networkStats.map(net => ({
+        //   iface: net.iface,
+        //   operstate: net.operstate,
+        //   rx_bytes: net.rx_bytes,
+        //   tx_bytes: net.tx_bytes,
+        //   rx_sec: net.rx_sec || 0,
+        //   tx_sec: net.tx_sec || 0
+        // }))
+      };
+    }
+
+    console.log(`PAYLOAD: ` + JSON.stringify(metrics));
 
     // Mengirim data ke API pihak ketiga
     console.log(`Sending metrics to ${config.apiUrl}`);
@@ -111,10 +133,10 @@ async function collectAndExportMetrics() {
   }
 }
 
-// Fungsi untuk memulai exporter
+// Update console.log di fungsi startExporter
 function startExporter() {
   console.log(`Starting metrics exporter. Sending metrics every ${config.exportInterval}ms to ${config.apiUrl}`);
-  console.log(`Metrics enabled: CPU=${config.enableCpu}, Memory=${config.enableMemory}, Swap=${config.enableSwap}, DiskIO=${config.enableDiskIO}, DiskSpace=${config.enableDiskSpace}`);
+  console.log(`Metrics enabled: CPU=${config.enableCpu}, Memory=${config.enableMemory}, Swap=${config.enableSwap}, DiskIO=${config.enableDiskIO}, DiskSpace=${config.enableDiskSpace}, Network=${config.enableNetwork}`);
   
   // Jalankan ekspor pertama
   collectAndExportMetrics();

@@ -105,7 +105,6 @@ async function collectAndExportMetrics() {
       // CALC DISK BYTE STATS
       if (!previousDiskByteStats) {
         previousDiskByteStats = getDiskByteStats();
-        console.log(getDiskByteStats());
       }
 
       const currentDiskByteStats = getDiskByteStats();

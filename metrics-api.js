@@ -67,7 +67,7 @@ async function collectData() {
     // Memory Load
     if (config.enableMemory) {
       const memInfo = await si.mem();
-      const memoryLoad = (memInfo.used / memInfo.total) * 100;
+      const memoryLoad = ((memInfo.total - memInfo.available) / memInfo.total) * 100;
       metrics.memory.push(memoryLoad);
       if (metrics.memory.length > 100) metrics.memory.shift();
     }

@@ -57,7 +57,7 @@ async function collectAndExportMetrics() {
         free: memInfo.free,
         active: memInfo.active,
         available: memInfo.available,
-        usedPercent: parseFloat(((memInfo.used / memInfo.total) * 100).toFixed(2))
+        usedPercent: parseFloat((((memInfo.total - memInfo.available) / memInfo.total) * 100).toFixed(2))
       };
     }
 

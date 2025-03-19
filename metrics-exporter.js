@@ -3,6 +3,15 @@ const axios = require('axios');
 const os = require('os');
 const si = require('systeminformation');
 
+// Add logging utility
+const LOG_LEVEL = process.env.LOG_LEVEL || 'NONE';
+const logger = {
+  none: () => {},
+  debug: (...args) => LOG_LEVEL === 'DEBUG' && console.log('[DEBUG]', ...args),
+  info: (...args) => ['INFO', 'DEBUG'].includes(LOG_LEVEL) && console.log('[INFO]', ...args),
+  error: (...args) => ['ERROR', 'INFO', 'DEBUG'].includes(LOG_LEVEL) && console.error('[ERROR]', ...args)
+};
+
 // Konfigurasi dari .env
 const config = {
   apiUrl: process.env.THIRD_PARTY_API_URL,
@@ -20,7 +29,7 @@ const config = {
 async function collectAndExportMetrics() {
   try {
     if (!config.apiUrl || !config.apiKey) {
-      console.error('Missing API configuration. Please check your .env file for THIRD_PARTY_API_URL and THIRD_PARTY_API_KEY');
+      logger.error('Missing API configuration. Please check your .env file for THIRD_PARTY_API_URL and THIRD_PARTY_API_KEY');
       return;
     }
 
@@ -110,10 +119,8 @@ async function collectAndExportMetrics() {
       };
     }
 
-    console.log(`PAYLOAD: ` + JSON.stringify(metrics));
-
-    // Mengirim data ke API pihak ketiga
-    console.log(`Sending metrics to ${config.apiUrl}`);
+    logger.debug(`PAYLOAD: ${JSON.stringify(metrics)}`);
+    logger.info(`Sending metrics to ${config.apiUrl}`);
     
     const response = await axios.post(config.apiUrl, metrics, {
       headers: {
@@ -122,26 +129,22 @@ async function collectAndExportMetrics() {
       }
     });
 
-    console.log(`Metrics exported successfully. Status: ${response.status}`);
-    // console.log(`RESPONSE: ` + JSON.stringify(response.data));
+    logger.info(`Metrics exported successfully. Status: ${response.status}`);
+    logger.debug(`RESPONSE: ${JSON.stringify(response.data)}`);
     
   } catch (error) {
-    console.error('Error exporting metrics:', error.message);
+    logger.error('Error exporting metrics:', error.message);
     if (error.response) {
-      console.error(`API response error: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
+      logger.error(`API response error: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
     }
   }
 }
 
-// Update console.log di fungsi startExporter
 function startExporter() {
-  console.log(`Starting metrics exporter. Sending metrics every ${config.exportInterval}ms to ${config.apiUrl}`);
-  console.log(`Metrics enabled: CPU=${config.enableCpu}, Memory=${config.enableMemory}, Swap=${config.enableSwap}, DiskIO=${config.enableDiskIO}, DiskSpace=${config.enableDiskSpace}, Network=${config.enableNetwork}`);
+  logger.info(`Starting metrics exporter. Sending metrics every ${config.exportInterval}ms to ${config.apiUrl}`);
+  logger.info(`Metrics enabled: CPU=${config.enableCpu}, Memory=${config.enableMemory}, Swap=${config.enableSwap}, DiskIO=${config.enableDiskIO}, DiskSpace=${config.enableDiskSpace}, Network=${config.enableNetwork}`);
   
-  // Jalankan ekspor pertama
   collectAndExportMetrics();
-  
-  // Jadwalkan ekspor berikutnya
   setInterval(collectAndExportMetrics, config.exportInterval);
 }
 

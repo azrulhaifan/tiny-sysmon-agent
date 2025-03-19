@@ -11,7 +11,8 @@ const config = {
   enableMemory: process.env.ENABLE_MEMORY_METRICS !== 'false',
   enableSwap: process.env.ENABLE_SWAP_METRICS !== 'false',
   enableDiskIO: process.env.ENABLE_DISK_IO_METRICS !== 'false',
-  enableDiskSpace: process.env.ENABLE_DISK_SPACE_METRICS !== 'false'
+  enableDiskSpace: process.env.ENABLE_DISK_SPACE_METRICS !== 'false',
+  enableNetwork: process.env.ENABLE_NETWORK_METRICS !== 'false'  
 };
 
 // Menyimpan data historis untuk menghitung min, max, avg
@@ -21,7 +22,9 @@ let metrics = {
   swap: [],
   diskRead: [],
   diskWrite: [],
-  diskIO: []
+  diskIO: [],
+  networkIn: [],    
+  networkOut: []    
 };
 
 // Fungsi untuk mengkonversi bytes ke format yang lebih mudah dibaca
@@ -89,6 +92,19 @@ async function collectData() {
       if (metrics.diskIO.length > 100) metrics.diskIO.shift();
     }
     
+    // Network metrics
+    if (config.enableNetwork) {
+      const networkStats = await si.networkStats();
+      const totalRx = networkStats.reduce((acc, net) => acc + net.rx_sec, 0);
+      const totalTx = networkStats.reduce((acc, net) => acc + net.tx_sec, 0);
+      
+      metrics.networkIn.push(totalRx);
+      metrics.networkOut.push(totalTx);
+      
+      if (metrics.networkIn.length > 100) metrics.networkIn.shift();
+      if (metrics.networkOut.length > 100) metrics.networkOut.shift();
+    }
+
   } catch (error) {
     console.error('Error collecting system data:', error);
   }
@@ -208,6 +224,29 @@ app.get('/api/system-metrics', async (req, res) => {
       response.disks = disks;
     }
     
+    // Di dalam route /api/system-metrics, tambahkan sebelum res.json(response)
+    // Tambahkan Network metrics jika diaktifkan
+    if (config.enableNetwork) {
+      response.network = {
+        traffic_per_second: {
+          in: {
+            stats: calculateStats(metrics.networkIn),
+            current: metrics.networkIn.length > 0 ? 
+              metrics.networkIn[metrics.networkIn.length - 1] : 0,
+            formatted: formatBytes(metrics.networkIn.length > 0 ? 
+              metrics.networkIn[metrics.networkIn.length - 1] : 0)
+          },
+          out: {
+            stats: calculateStats(metrics.networkOut),
+            current: metrics.networkOut.length > 0 ? 
+              metrics.networkOut[metrics.networkOut.length - 1] : 0,
+            formatted: formatBytes(metrics.networkOut.length > 0 ? 
+              metrics.networkOut[metrics.networkOut.length - 1] : 0)
+          }
+        }
+      };
+    }
+
     res.json(response);
   } catch (error) {
     console.error('Error processing request:', error);
@@ -218,7 +257,7 @@ app.get('/api/system-metrics', async (req, res) => {
 // Mulai server
 app.listen(port, () => {
   console.log(`System monitoring API running on port ${port}`);
-  console.log(`Metrics enabled: CPU=${config.enableCpu}, Memory=${config.enableMemory}, Swap=${config.enableSwap}, DiskIO=${config.enableDiskIO}, DiskSpace=${config.enableDiskSpace}`);
+  console.log(`Metrics enabled: CPU=${config.enableCpu}, Memory=${config.enableMemory}, Swap=${config.enableSwap}, DiskIO=${config.enableDiskIO}, DiskSpace=${config.enableDiskSpace}, Network=${config.enableNetwork}`);
 });
 
 module.exports = { collectData, metrics };

@@ -73,16 +73,41 @@ async function collectAndExportMetrics() {
     }
 
     // Mengumpulkan Disk IO metrics jika diaktifkan
-    if (config.enableDiskIO) {
-      const diskIO = await si.disksIO();
-      metrics.diskIO = {
-        readOps: diskIO.rIO,
-        writeOps: diskIO.wIO,
-        readOpsPerSec: diskIO.rIO_sec || 0,
-        writeOpsPerSec: diskIO.wIO_sec || 0,
-        totalOpsPerSec: (diskIO.rIO_sec || 0) + (diskIO.wIO_sec || 0)
-      };
-    }
+    // Add this at the top level of the file, outside any function
+    let previousDiskIO = null;
+
+    // Modify the Disk IO metrics collection
+        if (config.enableDiskIO) {
+          const diskIO = await si.disksIO();
+          const currentTime = Date.now();
+          
+          let readBytesPerSec = 0;
+          let writeBytesPerSec = 0;
+    
+          if (previousDiskIO) {
+            const timeDiff = (currentTime - previousDiskIO.timestamp) / 1000; // Convert to seconds
+            readBytesPerSec = Math.max(0, (diskIO.rBytes - previousDiskIO.rBytes) / timeDiff);
+            writeBytesPerSec = Math.max(0, (diskIO.wBytes - previousDiskIO.wBytes) / timeDiff);
+          }
+    
+          // Store current reading for next calculation
+          previousDiskIO = {
+            timestamp: currentTime,
+            rBytes: diskIO.rBytes,
+            wBytes: diskIO.wBytes
+          };
+    
+          metrics.diskIO = {
+            readOps: diskIO.rIO,
+            writeOps: diskIO.wIO,
+            readOpsPerSec: diskIO.rIO_sec || 0,
+            writeOpsPerSec: diskIO.wIO_sec || 0,
+            totalOpsPerSec: (diskIO.rIO_sec || 0) + (diskIO.wIO_sec || 0),
+            readBytesPerSec: Math.round(readBytesPerSec),
+            writeBytesPerSec: Math.round(writeBytesPerSec),
+            totalBytesPerSec: Math.round(readBytesPerSec + writeBytesPerSec)
+          };
+        }
 
     // Mengumpulkan Disk Space metrics jika diaktifkan
     if (config.enableDiskSpace) {

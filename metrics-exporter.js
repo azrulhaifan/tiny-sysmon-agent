@@ -23,7 +23,8 @@ const config = {
   enableSwap: process.env.ENABLE_SWAP_METRICS !== 'false', 
   enableDiskIO: process.env.ENABLE_DISK_IO_METRICS !== 'false',
   enableDiskSpace: process.env.ENABLE_DISK_SPACE_METRICS !== 'false',
-  enableNetwork: process.env.ENABLE_NETWORK_METRICS !== 'false'  // Tambahkan ini
+  enableNetwork: process.env.ENABLE_NETWORK_METRICS !== 'false',
+  mainDisk: process.env.MAIN_DISK || 'sda',
 };
 
 function getDiskByteStats() {
@@ -31,7 +32,7 @@ function getDiskByteStats() {
     const data = fs.readFileSync("/proc/diskstats", "utf8");
     const lines = data.split("\n");
 
-    const diskLine = lines.find(line => line.includes(" sda ")); // Ubah jika disk bukan sda
+    const diskLine = lines.find(line => line.includes(` ${config.mainDisk} `)); // Ubah jika disk bukan sda
     if (!diskLine) return null;
 
     const parts = diskLine.trim().split(/\s+/);
